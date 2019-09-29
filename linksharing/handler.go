@@ -5,6 +5,7 @@ package linksharing
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -68,14 +69,11 @@ func (handler *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (handler *Handler) serveHTTP(w http.ResponseWriter, r *http.Request) (err error) {
+	var scopeb58, bucket, unencPath string
 	ctx := r.Context()
 	defer mon.Task()(&ctx)(&err)
 
-	locationOnly := false
-
 	switch r.Method {
-	case http.MethodHead:
-		locationOnly = true
 	case http.MethodGet:
 	default:
 		err = errs.New("method not allowed")
@@ -83,13 +81,58 @@ func (handler *Handler) serveHTTP(w http.ResponseWriter, r *http.Request) (err e
 		return err
 	}
 
-	scope, bucket, unencPath, err := parseRequestPath(r.URL.Path)
-	if err != nil {
-		err = fmt.Errorf("invalid request: %v", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return err
+	// Drop the leading slash, if necessary
+	p := strings.TrimPrefix(r.URL.Path, "/")
+
+	// Split the request path
+	segments := strings.SplitN(p, "/", 3)
+
+	switch len(segments) {
+	case 1:
+		if segments[0] == "" {
+			handler.handleUplinkErr(w, "invalid request", fmt.Errorf("%s", "missing scope"))
+			return err
+		}
+		if segments[0] == "favicon.ico" {
+			return nil
+		}
+		scopeb58 = segments[0]
+	case 2:
+		scopeb58 = segments[0]
+		if segments[1] != "" {
+			bucket = segments[1]
+		}
+	case 3:
+		scopeb58 = segments[0]
+		bucket = segments[1]
+		unencPath = segments[2]
 	}
 
+	scope, err := uplink.ParseScope(scopeb58)
+	if err != nil {
+		handler.handleUplinkErr(w, "parsing scope", err)
+		return err
+	}
+	fmt.Println("SEGMENTS", segments)
+	if bucket == "" || unencPath == "" {
+		err = handler.serveList(ctx, scope, w, r)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	err = handler.serveFile(ctx, scope, bucket, unencPath, w, r)
+	return err
+}
+
+func (handler *Handler) serveFile(ctx context.Context, scope *uplink.Scope, bucket string, path storj.Path, w http.ResponseWriter, r *http.Request) (err error) {
+	fmt.Println(scope.SatelliteAddr)
+	fmt.Println(scope.APIKey.Serialize())
+	info, _ := scope.EncryptionAccess.Serialize()
+	fmt.Println(info)
+	fmt.Println(bucket)
+	fmt.Println(path)
 	p, err := handler.uplink.OpenProject(ctx, scope.SatelliteAddr, scope.APIKey)
 	if err != nil {
 		handler.handleUplinkErr(w, "open project", err)
@@ -100,7 +143,6 @@ func (handler *Handler) serveHTTP(w http.ResponseWriter, r *http.Request) (err e
 			handler.log.With(zap.Error(err)).Warn("unable to close project")
 		}
 	}()
-
 	b, err := p.OpenBucket(ctx, bucket, scope.EncryptionAccess)
 	if err != nil {
 		handler.handleUplinkErr(w, "open bucket", err)
@@ -112,7 +154,7 @@ func (handler *Handler) serveHTTP(w http.ResponseWriter, r *http.Request) (err e
 		}
 	}()
 
-	o, err := b.OpenObject(ctx, unencPath)
+	o, err := b.OpenObject(ctx, path)
 	if err != nil {
 		handler.handleUplinkErr(w, "open object", err)
 		return err
@@ -123,14 +165,66 @@ func (handler *Handler) serveHTTP(w http.ResponseWriter, r *http.Request) (err e
 		}
 	}()
 
-	if locationOnly {
+	if r.Method == http.MethodHead {
 		location := makeLocation(handler.urlBase, r.URL.Path)
 		http.Redirect(w, r, location, http.StatusFound)
 		return nil
 	}
 
-	ranger.ServeContent(ctx, w, r, unencPath, o.Meta.Modified, newObjectRanger(o))
+	ranger.ServeContent(ctx, w, r, path, o.Meta.Modified, newObjectRanger(o))
 	return nil
+}
+
+func (handler *Handler) serveList(ctx context.Context, scope *uplink.Scope, w http.ResponseWriter, r *http.Request) (err error) {
+	var fileList []storj.Object
+	fmt.Println(scope.SatelliteAddr)
+	fmt.Println(scope.APIKey.Serialize())
+	enckey, _ := scope.EncryptionAccess.Serialize()
+	fmt.Println(enckey)
+	p, err := handler.uplink.OpenProject(ctx, scope.SatelliteAddr, scope.APIKey)
+	if err != nil {
+		handler.handleUplinkErr(w, "open project", err)
+		return err
+	}
+	defer func() {
+		if err := p.Close(); err != nil {
+			handler.log.With(zap.Error(err)).Warn("unable to close project")
+		}
+	}()
+
+	list := uplink.BucketListOptions{
+		Direction: storj.Forward,
+		Limit:     100,
+	}
+
+	buckets, err := p.ListBuckets(ctx, &list)
+	if err != nil {
+		handler.handleUplinkErr(w, "list buckets", err)
+		return err
+	}
+	if len(buckets.Items) > 0 {
+		for _, bucket := range buckets.Items {
+			b, err := p.OpenBucket(ctx, bucket.Name, scope.EncryptionAccess)
+			if err != nil {
+				handler.handleUplinkErr(w, "open bucket", err)
+				return err
+			}
+			defer func() {
+				if err := b.Close(); err != nil {
+					handler.log.With(zap.Error(err)).Warn("unable to close bucket")
+				}
+			}()
+			bucketItems, err := b.ListObjects(ctx, nil)
+			if err != nil {
+				handler.handleUplinkErr(w, "bucket list", err)
+				return err
+			}
+			fileList = append(fileList, bucketItems.Items...)
+		}
+	}
+	writer := json.NewEncoder(w)
+	err = writer.Encode(fileList)
+	return err
 }
 
 func (handler *Handler) handleUplinkErr(w http.ResponseWriter, action string, err error) {
@@ -143,32 +237,6 @@ func (handler *Handler) handleUplinkErr(w http.ResponseWriter, action string, er
 		handler.log.Error("unable to handle request", zap.String("action", action), zap.Error(err))
 		http.Error(w, "unable to handle request", http.StatusInternalServerError)
 	}
-}
-
-func parseRequestPath(p string) (*uplink.Scope, string, string, error) {
-	// Drop the leading slash, if necessary
-	p = strings.TrimPrefix(p, "/")
-
-	// Split the request path
-	segments := strings.SplitN(p, "/", 3)
-	switch len(segments) {
-	case 1:
-		if segments[0] == "" {
-			return nil, "", "", errs.New("missing scope")
-		}
-		return nil, "", "", errs.New("missing bucket")
-	case 2:
-		return nil, "", "", errs.New("missing bucket path")
-	}
-	scopeb58 := segments[0]
-	bucket := segments[1]
-	unencPath := segments[2]
-
-	scope, err := uplink.ParseScope(scopeb58)
-	if err != nil {
-		return nil, "", "", err
-	}
-	return scope, bucket, unencPath, nil
 }
 
 type objectRanger struct {
