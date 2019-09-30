@@ -87,6 +87,7 @@ func (handler *Handler) serveHTTP(w http.ResponseWriter, r *http.Request) (err e
 	// Split the request path
 	segments := strings.SplitN(p, "/", 3)
 
+	// set path parts based on amount of splitted segments
 	switch len(segments) {
 	case 1:
 		if segments[0] == "" {
@@ -113,9 +114,10 @@ func (handler *Handler) serveHTTP(w http.ResponseWriter, r *http.Request) (err e
 		handler.handleUplinkErr(w, "parsing scope", err)
 		return err
 	}
-	fmt.Println("SEGMENTS", segments)
+
+	// if either bucket and/or path are empty, list all files
 	if bucket == "" || unencPath == "" {
-		err = handler.serveList(ctx, scope, w, r)
+		err = handler.serveList(ctx, scope, bucket, w, r)
 		if err != nil {
 			return err
 		}
@@ -175,8 +177,8 @@ func (handler *Handler) serveFile(ctx context.Context, scope *uplink.Scope, buck
 	return nil
 }
 
-func (handler *Handler) serveList(ctx context.Context, scope *uplink.Scope, w http.ResponseWriter, r *http.Request) (err error) {
-	var fileList []storj.Object
+func (handler *Handler) serveList(ctx context.Context, scope *uplink.Scope, bucket string, w http.ResponseWriter, r *http.Request) (err error) {
+
 	fmt.Println(scope.SatelliteAddr)
 	fmt.Println(scope.APIKey.Serialize())
 	enckey, _ := scope.EncryptionAccess.Serialize()
@@ -192,36 +194,52 @@ func (handler *Handler) serveList(ctx context.Context, scope *uplink.Scope, w ht
 		}
 	}()
 
-	list := uplink.BucketListOptions{
-		Direction: storj.Forward,
-		Limit:     100,
-	}
+	// create file object list
+	fileList := make([]storj.Object, 0)
 
-	buckets, err := p.ListBuckets(ctx, &list)
-	if err != nil {
-		handler.handleUplinkErr(w, "list buckets", err)
-		return err
-	}
-	if len(buckets.Items) > 0 {
-		for _, bucket := range buckets.Items {
-			b, err := p.OpenBucket(ctx, bucket.Name, scope.EncryptionAccess)
-			if err != nil {
-				handler.handleUplinkErr(w, "open bucket", err)
-				return err
-			}
-			defer func() {
-				if err := b.Close(); err != nil {
-					handler.log.With(zap.Error(err)).Warn("unable to close bucket")
+	// if no bucket specified, iterate over all of them and list all files recursively
+	if bucket != "" {
+		b, err := p.OpenBucket(ctx, bucket, scope.EncryptionAccess)
+		if err != nil {
+			handler.handleUplinkErr(w, "open bucket", err)
+			return err
+		}
+		bucketitems, err := b.ListObjects(ctx, nil)
+		if err != nil {
+			handler.handleUplinkErr(w, "list files", err)
+			return err
+		}
+		fileList = append(fileList, bucketitems.Items...)
+	} else {
+		buckets, err := p.ListBuckets(ctx, nil)
+		if err != nil {
+			handler.handleUplinkErr(w, "list buckets", err)
+			return err
+		}
+
+		if len(buckets.Items) > 0 {
+			for _, bucket := range buckets.Items {
+				b, err := p.OpenBucket(ctx, bucket.Name, scope.EncryptionAccess)
+				if err != nil {
+					handler.handleUplinkErr(w, "open bucket", err)
+					return err
 				}
-			}()
-			bucketItems, err := b.ListObjects(ctx, nil)
-			if err != nil {
-				handler.handleUplinkErr(w, "bucket list", err)
-				return err
+				defer func() {
+					if err := b.Close(); err != nil {
+						handler.log.With(zap.Error(err)).Warn("unable to close bucket")
+					}
+				}()
+				listing := storj.ListOptions{Limit: 1}
+				bucketItems, err := b.ListObjects(ctx, &listing)
+				if err != nil {
+					handler.handleUplinkErr(w, "bucket list", err)
+					return err
+				}
+				fileList = append(fileList, bucketItems.Items...)
 			}
-			fileList = append(fileList, bucketItems.Items...)
 		}
 	}
+
 	writer := json.NewEncoder(w)
 	err = writer.Encode(fileList)
 	return err
