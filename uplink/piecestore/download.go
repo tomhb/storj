@@ -127,6 +127,7 @@ func (client *Download) Read(data []byte) (read int, err error) {
 
 		// if we have an error return the error
 		if err != nil {
+			defer mon.Task()(&ctx, "node canceled: %s %d",client.peer.ID.String()[0:8], client.read)(&err)
 			return read, err
 		}
 		// if we are pending for an error, avoid further requests, but try to finish what's in unread buffer.
@@ -209,6 +210,7 @@ func (client *Download) Read(data []byte) (read int, err error) {
 	}
 
 	// all downloaded
+	defer mon.Task()(&ctx, "node finish: %s %d",client.peer.ID.String()[0:8], client.read)(&err)
 	if read == 0 {
 		return 0, io.EOF
 	}
