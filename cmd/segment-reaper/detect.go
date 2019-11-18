@@ -5,9 +5,11 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/csv"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/spf13/cobra"
@@ -17,6 +19,7 @@ import (
 	"storj.io/storj/pkg/cfgstruct"
 	"storj.io/storj/pkg/pb"
 	"storj.io/storj/pkg/process"
+	"storj.io/storj/pkg/storj"
 	"storj.io/storj/satellite/metainfo"
 )
 
@@ -55,9 +58,7 @@ type Object struct {
 	// if skip is true segments from object should be removed from memory when last segment is found
 	// or iteration is finished,
 	// mark it as true if one of the segments from this object is newer then specified threshold
-
-	// will be used later
-	// skip bool
+	skip bool
 }
 
 // ObjectsMap map that keeps objects representation
@@ -68,6 +69,9 @@ type Observer struct {
 	db      metainfo.PointerDB
 	objects ObjectsMap
 	writer  *csv.Writer
+
+	from *time.Time
+	to   *time.Time
 
 	lastProjectID string
 
@@ -106,6 +110,14 @@ func (observer *Observer) processSegment(ctx context.Context, path metainfo.Scop
 
 		// cleanup map to free memory
 		observer.objects = make(ObjectsMap)
+	}
+
+	if observer.from != nil && pointer.CreationDate.Before(*observer.from) {
+		object.skip = true
+		return nil
+	} else if observer.to != nil && pointer.CreationDate.After(*observer.to) {
+		object.skip = true
+		return nil
 	}
 
 	isLastSegment := path.Segment == "l"
@@ -201,6 +213,23 @@ func cmdDetect(cmd *cobra.Command, args []string) (err error) {
 		db:      db,
 		writer:  writer,
 	}
+
+	if detectCfg.From != "" {
+		fromDate, err := time.Parse(time.RFC3339, detectCfg.From)
+		if err != nil {
+			return err
+		}
+		observer.from = &fromDate
+	}
+
+	if detectCfg.To != "" {
+		toDate, err := time.Parse(time.RFC3339, detectCfg.From)
+		if err != nil {
+			return err
+		}
+		observer.to = &toDate
+	}
+
 	err = metainfo.IterateDatabase(ctx, db, observer)
 	if err != nil {
 		return err
@@ -209,11 +238,89 @@ func cmdDetect(cmd *cobra.Command, args []string) (err error) {
 	log.Info("number of inline segments", zap.Int("segments", observer.inlineSegments))
 	log.Info("number of last inline segments", zap.Int("segments", observer.lastInlineSegments))
 	log.Info("number of remote segments", zap.Int("segments", observer.remoteSegments))
+	log.Info("number of all segments", zap.Int("segments", observer.remoteSegments+observer.inlineSegments))
 	return nil
 }
 
 func analyzeProject(ctx context.Context, db metainfo.PointerDB, objectsMap ObjectsMap, csvWriter *csv.Writer) error {
+	for cluster, objects := range objectsMap {
+		for path, object := range objects {
+			if object.skip {
+				continue
+			}
+
+			segments := make([]byte, 0)
+			for i := byte(0); i < maxNumOfSegments; i++ {
+				found := object.segments&(1<<uint64(i)) != 0
+				if found {
+					segments = append(segments, i)
+				}
+			}
+
+			if object.hasLastSegment {
+				brokenObject := false
+				if object.expectedNumberOfSegments == 0 {
+					for i := 0; i < len(segments); i++ {
+						if int(segments[i]) != i {
+							brokenObject = true
+							break
+						}
+					}
+				} else if len(segments) != int(object.expectedNumberOfSegments)-1 {
+					// -1 because 'segments' doesn't contain last segment
+					brokenObject = true
+				}
+
+				if !brokenObject {
+					segments = []byte{}
+				} else {
+					err := printSegment(ctx, db, cluster, "l", path, csvWriter)
+					if err != nil {
+						return err
+					}
+				}
+			}
+
+			for _, segmentIndex := range segments {
+				err := printSegment(ctx, db, cluster, "s"+strconv.Itoa(int(segmentIndex)), path, csvWriter)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
 	return nil
+}
+
+func printSegment(ctx context.Context, db metainfo.PointerDB, cluster Cluster, segmentIndex string, path string, csvWriter *csv.Writer) error {
+	creationDate, err := pointerCreationDate(ctx, db, cluster, segmentIndex, path)
+	if err != nil {
+		return err
+	}
+	encodedPath := base64.StdEncoding.EncodeToString([]byte(path))
+	csvWriter.Write([]string{
+		cluster.projectID,
+		segmentIndex,
+		cluster.bucket,
+		encodedPath,
+		creationDate,
+	})
+	return nil
+}
+
+func pointerCreationDate(ctx context.Context, db metainfo.PointerDB, cluster Cluster, segmentIndex string, path string) (string, error) {
+	key := []byte(storj.JoinPaths(cluster.projectID, segmentIndex, cluster.bucket, path))
+	pointerBytes, err := db.Get(ctx, key)
+	if err != nil {
+		return "", err
+	}
+
+	pointer := &pb.Pointer{}
+	err = proto.Unmarshal(pointerBytes, pointer)
+	if err != nil {
+		return "", err
+	}
+	return pointer.CreationDate.String(), nil
 }
 
 func findOrCreate(cluster Cluster, path string, objects ObjectsMap) *Object {
