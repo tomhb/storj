@@ -1845,23 +1845,26 @@ func TestUseSegmentUploadResultsTwice(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		// try upload second segment with results from first segment upload
-		segmentID, _, _, err = metainfoClient.BeginSegment(ctx, metainfo.BeginSegmentParams{
+		// Delete the recenlty upload segment
+		_, _, _, err = metainfoClient.BeginDeleteSegment(ctx, metainfo.BeginDeleteSegmentParams{
 			StreamID: streamID,
 			Position: storj.SegmentPosition{
-				Index: 1,
+				Index: 0,
 			},
-			MaxOrderLimit: 8 * memory.MiB.Int64(),
 		})
 		require.NoError(t, err)
 
+		// Here we could use the limits returned by BeginDeleteSegments for deleting
+		// the pieces from the Storage Nodes.
+
+		// Commits again the segment hence Storage Nodes shoul fail audits on the
+		// pieces of this segment.
 		err = metainfoClient.CommitSegment(ctx, metainfo.CommitSegmentParams{
 			SegmentID:         segmentID,
 			Encryption:        storj.SegmentEncryption{},
 			SizeEncryptedData: size,
 			UploadResult:      uploadResults,
 		})
-		require.NoError(t, err)
-
+		require.Error(t, err)
 	})
 }
