@@ -4,6 +4,7 @@
 package metainfo_test
 
 import (
+	"bytes"
 	"context"
 	"sort"
 	"strconv"
@@ -29,8 +30,10 @@ import (
 	"storj.io/storj/private/testrand"
 	"storj.io/storj/satellite"
 	"storj.io/storj/uplink"
+	"storj.io/storj/uplink/ecclient"
 	"storj.io/storj/uplink/eestream"
 	"storj.io/storj/uplink/metainfo"
+	"storj.io/storj/uplink/storage/segments"
 )
 
 func TestInvalidAPIKey(t *testing.T) {
@@ -1782,5 +1785,83 @@ func TestValidateRS(t *testing.T) {
 		rs.MaxThreshold = 5
 		err = ul.UploadWithConfig(ctx, satellite, rs, "testbucket", "test/path/max", testData)
 		require.NoError(t, err)
+	})
+}
+
+func TestUseSegmentUploadResultsTwice(t *testing.T) {
+	testplanet.Run(t, testplanet.Config{
+		SatelliteCount: 1, StorageNodeCount: 4, UplinkCount: 1,
+	}, func(t *testing.T, ctx *testcontext.Context, planet *testplanet.Planet) {
+		ul := planet.Uplinks[0]
+		satellite := planet.Satellites[0]
+		apiKey := planet.Uplinks[0].APIKey[planet.Satellites[0].ID()]
+
+		err := ul.CreateBucket(ctx, planet.Satellites[0], "for-validation")
+		require.NoError(t, err)
+
+		metainfoClient, err := planet.Uplinks[0].DialMetainfo(ctx, satellite, apiKey)
+		require.NoError(t, err)
+		defer ctx.Check(metainfoClient.Close)
+
+		var segmentsStore segments.Store
+		{
+			ec := ecclient.NewClient(planet.Uplinks[0].Log.Named("ecclient"), planet.Uplinks[0].Dialer, 0)
+
+			rs, err := eestream.NewRedundancyStrategyFromStorj(ul.GetConfig(satellite).GetRedundancyScheme())
+			require.NoError(t, err)
+			segmentsStore = segments.NewSegmentStore(metainfoClient, ec, rs)
+		}
+
+		bucket, err := metainfoClient.GetBucket(ctx, metainfo.GetBucketParams{
+			Name: []byte("for-validation"),
+		})
+		require.NoError(t, err)
+
+		streamID, err := metainfoClient.BeginObject(ctx, metainfo.BeginObjectParams{
+			Bucket:        []byte(bucket.Name),
+			EncryptedPath: []byte("unencrypted-path"),
+			Redundancy:    ul.GetConfig(satellite).GetRedundancyScheme(),
+		})
+		require.NoError(t, err)
+
+		segmentID, limits, piecePrivateKey, err := metainfoClient.BeginSegment(ctx, metainfo.BeginSegmentParams{
+			StreamID: streamID,
+			Position: storj.SegmentPosition{
+				Index: 0,
+			},
+			MaxOrderLimit: 8 * memory.MiB.Int64(),
+		})
+		require.NoError(t, err)
+
+		reader := bytes.NewBuffer(testrand.Bytes(10 * memory.KiB))
+		uploadResults, size, err := segmentsStore.Put(ctx, reader, time.Now().Add(time.Hour), limits, piecePrivateKey)
+		require.NoError(t, err)
+
+		err = metainfoClient.CommitSegment(ctx, metainfo.CommitSegmentParams{
+			SegmentID:         segmentID,
+			Encryption:        storj.SegmentEncryption{},
+			SizeEncryptedData: size,
+			UploadResult:      uploadResults,
+		})
+		require.NoError(t, err)
+
+		// try upload second segment with results from first segment upload
+		segmentID, _, _, err = metainfoClient.BeginSegment(ctx, metainfo.BeginSegmentParams{
+			StreamID: streamID,
+			Position: storj.SegmentPosition{
+				Index: 1,
+			},
+			MaxOrderLimit: 8 * memory.MiB.Int64(),
+		})
+		require.NoError(t, err)
+
+		err = metainfoClient.CommitSegment(ctx, metainfo.CommitSegmentParams{
+			SegmentID:         segmentID,
+			Encryption:        storj.SegmentEncryption{},
+			SizeEncryptedData: size,
+			UploadResult:      uploadResults,
+		})
+		require.NoError(t, err)
+
 	})
 }
