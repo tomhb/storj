@@ -114,7 +114,7 @@ export function makeProjectsModule(api: ProjectsApi): StoreModule<ProjectsState>
             },
         },
         actions: {
-            [FETCH]: async function ({commit, state}: any): Promise<Project[]> {
+            [FETCH]: async function ({commit}: any): Promise<Project[]> {
                 const projects = await api.get();
 
                 commit(SET_PROJECTS, projects);
@@ -128,7 +128,7 @@ export function makeProjectsModule(api: ProjectsApi): StoreModule<ProjectsState>
 
                 return project;
             },
-            [SELECT]: async function ({commit}: any, projectID: string): Promise<void> {
+            [SELECT]: function ({commit}: any, projectID: string): void {
                 commit(SELECT_PROJECT, projectID);
             },
             [UPDATE]: async function ({commit}: any, updateProjectModel: UpdateProjectModel): Promise<void> {

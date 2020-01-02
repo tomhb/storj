@@ -50,7 +50,6 @@ import {
     PM_ACTIONS,
 } from '@/utils/constants/actionNames';
 import { AppState } from '@/utils/constants/appStateEnum';
-import { LocalData } from '@/utils/localData';
 
 const {
     SETUP_ACCOUNT,
