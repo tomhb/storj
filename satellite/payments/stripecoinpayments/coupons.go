@@ -21,7 +21,7 @@ type CouponsDB interface {
 	// Update updates coupon in database.
 	Update(ctx context.Context, couponID uuid.UUID, status payments.CouponStatus) error
 	// List returns all coupons with specified status.
-	List(ctx context.Context, status payments.CouponStatus) (_ []payments.Coupon, err error)
+	List(ctx context.Context, status payments.CouponStatus) ([]payments.Coupon, error)
 	// List returns all coupons of specified user.
 	ListByUserID(ctx context.Context, userID uuid.UUID) ([]payments.Coupon, error)
 	// ListPending returns paginated list of coupons with specified status.
@@ -35,10 +35,9 @@ type CouponsDB interface {
 	GetLatest(ctx context.Context, couponID uuid.UUID) (time.Time, error)
 }
 
-// CouponUsage stores amount of money that should be charged from coupon for some period.
+// CouponUsage stores amount of money that should be charged from coupon for billing period.
 type CouponUsage struct {
-	ID       uuid.UUID
 	CouponID uuid.UUID
 	Amount   int64
-	End      time.Time
+	Period   time.Time
 }

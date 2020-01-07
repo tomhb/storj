@@ -13,14 +13,25 @@ import (
 // Coupon is attached to the project.
 // At the end of the period, the entire remaining coupon amount will be returned from the account balance.
 type Coupon struct {
-	ID          uuid.UUID     `json:"id"`
-	UserID      uuid.UUID     `json:"userId"`
-	ProjectID   uuid.UUID     `json:"projectId"`
-	Amount      int64         `json:"amount"`   // Amount is stored in cents.
-	Duration    time.Duration `json:"duration"` // Duration is stored in days.
-	Description string        `json:"description"`
-	Status      CouponStatus  `json:"status"`
-	Created     time.Time     `json:"created"`
+	ID          uuid.UUID    `json:"id"`
+	UserID      uuid.UUID    `json:"userId"`
+	ProjectID   uuid.UUID    `json:"projectId"`
+	Amount      int64        `json:"amount"`   // Amount is stored in cents.
+	Duration    int          `json:"duration"` // Duration is stored in number ob billing periods.
+	Description string       `json:"description"`
+	Status      CouponStatus `json:"status"`
+	Created     time.Time    `json:"created"`
+}
+
+// IsExpired checks if coupon is not after its rollup period.
+func (coupon *Coupon) IsExpired() bool {
+	expirationDate := time.Date(coupon.Created.Year(), coupon.Created.Month(), 0, 0, 0 ,0 ,0, nil)
+	expirationDate.AddDate(0, coupon.Duration, 0)
+
+	now := time.Now()
+	now = time.Date(now.Year(), now.Month(), 0, 0, 0 ,0 ,0, nil)
+
+	return expirationDate.Before(now)
 }
 
 // CouponStatus indicates the state of the coupon.

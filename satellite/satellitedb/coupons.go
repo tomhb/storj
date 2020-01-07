@@ -145,7 +145,7 @@ func fromDBXCoupon(dbxCoupon *dbx.Coupon) (coupon payments.Coupon, err error) {
 		return payments.Coupon{}, err
 	}
 
-	coupon.Duration = time.Duration(dbxCoupon.Duration)
+	coupon.Duration = uint8(dbxCoupon.Duration)
 	coupon.Description = dbxCoupon.Description
 	coupon.Amount = dbxCoupon.Amount
 	coupon.Created = dbxCoupon.CreatedAt
@@ -158,17 +158,10 @@ func fromDBXCoupon(dbxCoupon *dbx.Coupon) (coupon payments.Coupon, err error) {
 func (coupons *coupons) AddUsage(ctx context.Context, usage stripecoinpayments.CouponUsage) (err error) {
 	defer mon.Task()(&ctx, usage)(&err)
 
-	id, err := uuid.New()
-	if err != nil {
-		return err
-	}
-
 	_, err = coupons.db.Create_CouponUsage(
 		ctx,
-		dbx.CouponUsage_Id(id[:]),
 		dbx.CouponUsage_CouponId(usage.CouponID[:]),
 		dbx.CouponUsage_Amount(usage.Amount),
-		dbx.CouponUsage_IntervalEnd(usage.End),
 	)
 
 	return err

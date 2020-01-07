@@ -61,15 +61,13 @@ CREATE TABLE coupons (
 	status integer NOT NULL,
 	duration bigint NOT NULL,
 	created_at timestamp with time zone NOT NULL,
-	PRIMARY KEY ( id ),
-	UNIQUE ( project_id )
+	PRIMARY KEY ( id )
 );
 CREATE TABLE coupon_usages (
-	id bytea NOT NULL,
 	coupon_id bytea NOT NULL,
 	amount bigint NOT NULL,
-	interval_end timestamp with time zone NOT NULL,
-	PRIMARY KEY ( id )
+	period timestamp with time zone NOT NULL,
+	PRIMARY KEY ( coupon_id, period )
 );
 CREATE TABLE graceful_exit_progress (
 	node_id bytea NOT NULL,

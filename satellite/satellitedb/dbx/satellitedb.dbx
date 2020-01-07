@@ -1019,7 +1019,6 @@ read one (
 
 model coupon (
     key id
-    unique project_id
 
     field id               blob
     field project_id       blob
@@ -1056,11 +1055,10 @@ read limitoffset (
     orderby desc coupon.created_at
 )
 model coupon_usage (
-    key id
+    key coupon_id period
 
-    field id             blob
-    field coupon_id      blob
-    field amount         int64
-    field interval_end   timestamp
+    field coupon_id  blob
+    field amount     int64
+    field period     timestamp ( autoinsert )
 )
 create coupon_usage ()
