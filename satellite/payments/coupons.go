@@ -19,6 +19,7 @@ type Coupon struct {
 	Amount      int64        `json:"amount"`   // Amount is stored in cents.
 	Duration    int          `json:"duration"` // Duration is stored in number ob billing periods.
 	Description string       `json:"description"`
+	Type        CouponType   `json:"type"`
 	Status      CouponStatus `json:"status"`
 	Created     time.Time    `json:"created"`
 }
@@ -33,6 +34,15 @@ func (coupon *Coupon) IsExpired() bool {
 
 	return expirationDate.Before(now)
 }
+
+// CouponType indicates the type of the coupon.
+type CouponType int
+
+const (
+	// CouponTypePromotional defines that this coupon is a promotional coupon.
+	// Promotional coupon is added only once after adding payment method or 50$ with storj tokens.
+	CouponTypePromotional CouponType = 0
+)
 
 // CouponStatus indicates the state of the coupon.
 type CouponStatus int

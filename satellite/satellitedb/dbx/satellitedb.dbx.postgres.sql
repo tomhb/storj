@@ -58,6 +58,7 @@ CREATE TABLE coupons (
 	user_id bytea NOT NULL,
 	amount bigint NOT NULL,
 	description text NOT NULL,
+	type integer NOT NULL,
 	status integer NOT NULL,
 	duration bigint NOT NULL,
 	created_at timestamp with time zone NOT NULL,

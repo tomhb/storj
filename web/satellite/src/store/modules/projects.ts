@@ -119,12 +119,6 @@ export function makeProjectsModule(api: ProjectsApi): StoreModule<ProjectsState>
 
                 commit(SET_PROJECTS, projects);
 
-                if (state.selectedProject.id) {
-                    const limits = await api.getLimits(state.selectedProject.id);
-
-                    commit(SET_LIMITS, limits);
-                }
-
                 return projects;
             },
             [CREATE]: async function ({commit}: any, createProjectModel: CreateProjectModel): Promise<Project> {
@@ -136,10 +130,6 @@ export function makeProjectsModule(api: ProjectsApi): StoreModule<ProjectsState>
             },
             [SELECT]: async function ({commit}: any, projectID: string): Promise<void> {
                 commit(SELECT_PROJECT, projectID);
-
-                const limits = await api.getLimits(projectID);
-
-                commit(SET_LIMITS, limits);
             },
             [UPDATE]: async function ({commit}: any, updateProjectModel: UpdateProjectModel): Promise<void> {
                 await api.update(updateProjectModel.id, updateProjectModel.description);

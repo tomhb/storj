@@ -5,10 +5,9 @@ package mockpayments
 
 import (
 	"context"
-
 	"github.com/skyrings/skyring-common/tools/uuid"
 	"github.com/zeebo/errs"
-	monkit "gopkg.in/spacemonkeygo/monkit.v2"
+	"gopkg.in/spacemonkeygo/monkit.v2"
 
 	"storj.io/storj/satellite/payments"
 )
@@ -73,6 +72,13 @@ func (accounts *accounts) Balance(ctx context.Context, userID uuid.UUID) (_ int6
 	defer mon.Task()(&ctx, userID)(&err)
 
 	return 0, nil
+}
+
+// AddCoupon creates new coupon for specified user and project.
+func (accounts *accounts) AddCoupon(ctx context.Context, userID, projectID uuid.UUID, amount int64, duration int, description string, couponType payments.CouponType) (err error) {
+	defer mon.Task()(&ctx, userID, projectID, amount, duration, couponType)(&err)
+
+	return nil
 }
 
 // ProjectCharges returns how much money current user will be charged for each project.

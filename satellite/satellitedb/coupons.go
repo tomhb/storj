@@ -44,6 +44,7 @@ func (coupons *coupons) Insert(ctx context.Context, coupon payments.Coupon) (err
 		dbx.Coupon_UserId(coupon.UserID[:]),
 		dbx.Coupon_Amount(coupon.Amount),
 		dbx.Coupon_Description(coupon.Description),
+		dbx.Coupon_Type(int(coupon.Type)),
 		dbx.Coupon_Status(int(coupon.Status)),
 		dbx.Coupon_Duration(int64(coupon.Duration)),
 	)
@@ -145,7 +146,7 @@ func fromDBXCoupon(dbxCoupon *dbx.Coupon) (coupon payments.Coupon, err error) {
 		return payments.Coupon{}, err
 	}
 
-	coupon.Duration = uint8(dbxCoupon.Duration)
+	coupon.Duration = int(dbxCoupon.Duration)
 	coupon.Description = dbxCoupon.Description
 	coupon.Amount = dbxCoupon.Amount
 	coupon.Created = dbxCoupon.CreatedAt

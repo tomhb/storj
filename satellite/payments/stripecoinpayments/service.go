@@ -10,8 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"storj.io/storj/private/memory"
-
 	"github.com/skyrings/skyring-common/tools/uuid"
 	"github.com/stripe/stripe-go"
 	"github.com/stripe/stripe-go/client"
@@ -19,6 +17,7 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/spacemonkeygo/monkit.v2"
 
+	"storj.io/common/memory"
 	"storj.io/storj/satellite/accounting"
 	"storj.io/storj/satellite/console"
 	"storj.io/storj/satellite/payments"
@@ -107,7 +106,7 @@ func (service *Service) Accounts() payments.Accounts {
 }
 
 // AddCoupon attaches a coupon for payment account.
-func (service *Service) AddCoupon(ctx context.Context, userID, projectID uuid.UUID, amount int64, duration int, description string) (err error) {
+func (service *Service) AddCoupon(ctx context.Context, userID, projectID uuid.UUID, amount int64, duration int, description string, couponType payments.CouponType) (err error) {
 	defer mon.Task()(&ctx, userID, amount, duration)(&err)
 
 	coupon := payments.Coupon{
@@ -115,6 +114,7 @@ func (service *Service) AddCoupon(ctx context.Context, userID, projectID uuid.UU
 		Status:      payments.CouponActive,
 		ProjectID:   projectID,
 		Amount:      amount,
+		Type:        couponType,
 		Description: description,
 		Duration:    duration,
 	}

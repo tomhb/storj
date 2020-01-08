@@ -1025,6 +1025,7 @@ model coupon (
     field user_id          blob
     field amount           int64
     field description      text
+    field type             int
     field status           int   ( updatable )
     field duration         int64
 

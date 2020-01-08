@@ -81,7 +81,24 @@ func (accounts *accounts) Balance(ctx context.Context, userID uuid.UUID) (_ int6
 		couponAmount += coupon.Amount
 	}
 
-	return c.Balance + couponAmount, nil
+	return -c.Balance + couponAmount, nil
+}
+
+// AddCoupon attaches a coupon for payment account.
+func (accounts *accounts) AddCoupon(ctx context.Context, userID, projectID uuid.UUID, amount int64, duration int, description string, couponType payments.CouponType) (err error) {
+	defer mon.Task()(&ctx, userID, amount, duration, description, couponType)(&err)
+
+	coupon := payments.Coupon{
+		UserID:      userID,
+		Status:      payments.CouponActive,
+		ProjectID:   projectID,
+		Amount:      amount,
+		Description: description,
+		Duration:    duration,
+		Type:        couponType,
+	}
+
+	return Error.Wrap(accounts.service.db.Coupons().Insert(ctx, coupon))
 }
 
 // ProjectCharges returns how much money current user will be charged for each project.

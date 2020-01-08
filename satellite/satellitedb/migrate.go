@@ -550,6 +550,33 @@ func (db *satelliteDB) PostgresMigration() *migrate.Migration {
 					`CREATE INDEX nodes_offline_times_node_id_index ON nodes_offline_times ( node_id );`,
 				},
 			},
+			{
+				DB:          db.DB,
+				Description: "Update coupon related tables",
+				Version:     74,
+				Action: migrate.SQL{
+					`DROP TABLE coupon_usages;`,
+					`DROP TABLE coupons;`,
+					`CREATE TABLE coupons (
+						id bytea NOT NULL,
+						project_id bytea NOT NULL,
+						user_id bytea NOT NULL,
+						amount bigint NOT NULL,
+						description text NOT NULL,
+						type integer NOT NULL,
+						status integer NOT NULL,
+						duration bigint NOT NULL,
+						created_at timestamp with time zone NOT NULL,
+						PRIMARY KEY ( id )
+					);`,
+					`CREATE TABLE coupon_usages (
+						coupon_id bytea NOT NULL,
+						amount bigint NOT NULL,
+						period timestamp with time zone NOT NULL,
+						PRIMARY KEY ( coupon_id, period )
+					);`,
+				},
+			},
 		},
 	}
 }

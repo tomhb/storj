@@ -502,47 +502,47 @@ func createInvoiceItems(cmd *cobra.Command, args []string) error {
 }
 
 func prepareInvoiceCoupons(cmd *cobra.Command, args []string) error {
-	ctx, _ := process.Ctx(cmd)
-	i, err := NewInspector(*Addr, *IdentityPath)
-	if err != nil {
-		return ErrInspectorDial.Wrap(err)
-	}
+	//ctx, _ := process.Ctx(cmd)
+	//i, err := NewInspector(*Addr, *IdentityPath)
+	//if err != nil {
+	//	return ErrInspectorDial.Wrap(err)
+	//}
+	//
+	//defer func() { err = errs.Combine(err, i.Close()) }()
+	//
+	//period, err := parseDateString(args[0])
+	//if err != nil {
+	//	return ErrArgs.New("invalid period specified: %v", err)
+	//}
 
-	defer func() { err = errs.Combine(err, i.Close()) }()
-
-	period, err := parseDateString(args[0])
-	if err != nil {
-		return ErrArgs.New("invalid period specified: %v", err)
-	}
-
-	_, err = i.paymentsClient.PrepareInvoiceCoupons(ctx,
-		&pb.PrepareInvoiceCouponsRequest{
-			Period: period,
-		},
-	)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println("successfully created invoice coupons")
+	//_, err = i.paymentsClient.PrepareInvoiceCoupons(ctx,
+	//	&pb.PrepareInvoiceCouponsRequest{
+	//		Period: period,
+	//	},
+	//)
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//fmt.Println("successfully created invoice coupons")
 	return nil
 }
 
 func createInvoiceCoupons(cmd *cobra.Command, args []string) error {
-	ctx, _ := process.Ctx(cmd)
-	i, err := NewInspector(*Addr, *IdentityPath)
-	if err != nil {
-		return ErrInspectorDial.Wrap(err)
-	}
-
-	defer func() { err = errs.Combine(err, i.Close()) }()
-
-	_, err = i.paymentsClient.ApplyInvoiceCoupons(ctx, &pb.ApplyInvoiceCouponsRequest{})
-	if err != nil {
-		return err
-	}
-
-	fmt.Println("successfully created invoice coupon line items")
+	//ctx, _ := process.Ctx(cmd)
+	//i, err := NewInspector(*Addr, *IdentityPath)
+	//if err != nil {
+	//	return ErrInspectorDial.Wrap(err)
+	//}
+	//
+	//defer func() { err = errs.Combine(err, i.Close()) }()
+	//
+	//_, err = i.paymentsClient.ApplyInvoiceCoupons(ctx, &pb.ApplyInvoiceCouponsRequest{})
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//fmt.Println("successfully created invoice coupon line items")
 	return nil
 }
 
