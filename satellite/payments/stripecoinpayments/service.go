@@ -122,8 +122,8 @@ func (service *Service) AddCoupon(ctx context.Context, userID, projectID uuid.UU
 	return Error.Wrap(service.db.Coupons().Insert(ctx, coupon))
 }
 
-// processCoupons updates all daily coupon usage in a loop.
-func (service *Service) processCoupons(ctx context.Context) (err error) {
+// PrepareCoupons updates all daily coupon usage in a loop.
+func (service *Service) PrepareCoupons(ctx context.Context) (err error) {
 	defer mon.Task()(&ctx)(&err)
 	const limit = 25
 	before := time.Now()
