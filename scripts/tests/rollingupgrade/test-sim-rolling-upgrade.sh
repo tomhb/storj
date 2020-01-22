@@ -48,12 +48,25 @@ populate_sno_versions(){
 # in stage 2: satellite core uses latest release version and satellite api uses master. Storage nodes are split into half on latest release version and half on master. Uplink uses the latest release version plus master
 git fetch --tags
 current_release_version=$(git describe --tags `git rev-list --tags --max-count=1`)
-stage1_sat_version=$current_release_version
-stage1_uplink_version=$current_release_version
-stage1_storagenode_versions=$(populate_sno_versions $current_release_version 10)
-stage2_sat_version="master"
-stage2_uplink_versions=$current_release_version\ "master"
-stage2_storagenode_versions=$(populate_sno_versions $current_release_version 5)\ $(populate_sno_versions "master" 5)
+prev_release_version=$(git tag -l --sort -version:refname | sort -n -k2,2 -t'.' --unique | tail -n 2 | head -n 1)
+
+BRANCH_NAME=${BRANCH_NAME:-""}
+if [[ "${BRANCH_NAME}" != "master"  ]]
+then
+    stage1_sat_version=$prev_release_version
+    stage1_uplink_version=$prev_release_version
+    stage1_storagenode_versions=$(populate_sno_versions $prev_release_version 10)
+    stage2_sat_version=$current_release_version
+    stage2_uplink_versions=$prev_release_version\ $current_release_version
+    stage2_storagenode_versions=$(populate_sno_versions $prev_release_version 5)\ $(populate_sno_versions $current_release_version 5)
+else
+    stage1_sat_version=$current_release_version
+    stage1_uplink_version=$current_release_version
+    stage1_storagenode_versions=$(populate_sno_versions $current_release_version 10)
+    stage2_sat_version="master"
+    stage2_uplink_versions=$current_release_version\ "master"
+    stage2_storagenode_versions=$(populate_sno_versions $current_release_version 5)\ $(populate_sno_versions "master" 5)
+fi
 
 echo "stage1_sat_version" $stage1_sat_version
 echo "stage1_uplink_version" $stage1_uplink_version
