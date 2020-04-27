@@ -119,14 +119,14 @@ func (d *Deleter) work(ctx context.Context) error {
 			if err != nil {
 				// If a piece cannot be deleted, we just log the error.
 				d.log.Error("delete failed",
-					zap.Stringer("Satellite ID", r.SatelliteID),
 					zap.Stringer("Piece ID", r.PieceID),
+					zap.Stringer("Satellite ID", r.SatelliteID),
 					zap.Error(err),
 				)
 			} else {
 				d.log.Info("deleted",
-					zap.Stringer("Satellite ID", r.SatelliteID),
 					zap.Stringer("Piece ID", r.PieceID),
+					zap.Stringer("Satellite ID", r.SatelliteID),
 				)
 			}
 
